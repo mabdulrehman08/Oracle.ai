@@ -4,21 +4,30 @@ import type {
   Approval,
   BudgetLedgerEntry,
   Company,
+  CompanyGenome,
   CompanyMemoryEntry,
   Evaluation,
   EventRecord,
   HiringCandidate,
   SandboxRun,
+  SponsorStatus,
   Task,
 } from '../types';
 import { AgentDetailPanel } from './AgentDetailPanel';
+import { AgentGraph } from './AgentGraph';
 import { ApprovalsPanel } from './ApprovalsPanel';
+import { EvolutionPanel } from './EvolutionPanel';
+import { GenomePanel } from './GenomePanel';
+import { HudPanel } from './HudPanel';
 import { HudEvaluations } from './HudEvaluations';
 import { MemoryPanel } from './MemoryPanel';
-import { OrgChart } from './OrgChart';
 import { SandboxPanel } from './SandboxPanel';
+import { SponsorsPanel } from './SponsorsPanel';
 import { StatsCards } from './StatsCards';
 import { Timeline } from './Timeline';
+
+const tabs = ['evolution', 'hud', 'agents', 'approvals', 'sandbox', 'genome', 'memory', 'sponsors'] as const;
+type DashboardTab = (typeof tabs)[number];
 
 interface DashboardProps {
   company: Company;
@@ -31,16 +40,19 @@ interface DashboardProps {
   sandboxRuns: SandboxRun[];
   hiringCandidates: HiringCandidate[];
   memory: CompanyMemoryEntry[];
+  genome: CompanyGenome;
+  sponsors: SponsorStatus[];
+  pitchMode: boolean;
   selectedAgent: Agent | null;
   onSelectAgent: (agentId: string) => void;
   onRunDemo: () => Promise<void>;
   onRunPhaseTwoDemo: () => Promise<void>;
+  onRunFullDemo: () => Promise<void>;
   onApproveRequest: (approvalId: string) => Promise<void>;
   onRejectRequest: (approvalId: string) => Promise<void>;
+  onTogglePitchMode: () => void;
+  onOpenSponsors: () => void;
 }
-
-const tabs = ['org chart', 'timeline', 'approvals', 'sandbox', 'memory'] as const;
-type DashboardTab = (typeof tabs)[number];
 
 export function Dashboard({
   company,
@@ -53,60 +65,102 @@ export function Dashboard({
   sandboxRuns,
   hiringCandidates,
   memory,
+  genome,
+  sponsors,
+  pitchMode,
   selectedAgent,
   onSelectAgent,
   onRunDemo,
   onRunPhaseTwoDemo,
+  onRunFullDemo,
   onApproveRequest,
   onRejectRequest,
+  onTogglePitchMode,
+  onOpenSponsors,
 }: DashboardProps) {
-  const [activeTab, setActiveTab] = useState<DashboardTab>('org chart');
+  const [activeTab, setActiveTab] = useState<DashboardTab>('evolution');
 
-  const sideSummary = useMemo(() => {
-    const activeApprovals = approvals.filter((approval) => approval.status === 'pending').length;
-    const sandboxActive = sandboxRuns.filter((run) => run.status !== 'completed').length;
-    return { activeApprovals, sandboxActive };
-  }, [approvals, sandboxRuns]);
+  const summary = useMemo(() => {
+    const pendingApprovals = approvals.filter((approval) => approval.status === 'pending').length;
+    const activeAgents = agents.filter((agent) => agent.status !== 'terminated').length;
+    const connectedSponsors = sponsors.filter((sponsor) => sponsor.mode === 'connected').length;
+    return { pendingApprovals, activeAgents, connectedSponsors };
+  }, [approvals, agents, sponsors]);
+
+  const stat = (label: string, value: string) => (
+    <div className="rounded-full border border-line bg-cream px-3.5 py-1.5 text-xs font-medium text-steel">
+      {label}: <span className="font-semibold text-ink">{value}</span>
+    </div>
+  );
 
   return (
-    <main className="min-h-screen bg-[linear-gradient(180deg,#050814_0%,#0a1020_100%)] px-4 py-4 text-white md:px-6">
-      <div className="mx-auto flex max-w-[1600px] flex-col gap-4">
-        <div className="flex flex-col gap-4 rounded-[28px] border border-white/10 bg-white/5 p-5 backdrop-blur-xl lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.35em] text-glow">Oracle Evolution Dashboard</p>
-            <h1 className="mt-2 text-3xl font-semibold">{company.idea}</h1>
+    <main className="relative min-h-screen bg-white/45 px-4 py-4 text-ink md:px-6">
+      <div className="relative mx-auto flex max-w-[1500px] flex-col gap-4">
+        <div className="glass relative overflow-hidden rounded-2xl p-5">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-px gradient-line" />
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div>
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-7 w-7 items-center justify-center rounded-md bg-yc text-sm font-bold text-white">Y</span>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-yc">evoler.ai · Company OS</p>
+              </div>
+              <h1 className="mt-2.5 text-2xl font-bold tracking-tight text-ink md:text-3xl">{company.idea}</h1>
+              <p className="mt-2 max-w-3xl text-sm leading-7 text-steel">
+                evoler.ai creates agents, assigns work, evaluates outcomes with HUD, saves memory, terminates weak
+                operators, and mutates into a stronger company.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2.5">
+              <button
+                className="rounded-lg border border-line bg-white px-4 py-2.5 text-sm font-semibold text-ink transition hover:bg-cream"
+                onClick={() => void onRunDemo()}
+              >
+                Run Task 1
+              </button>
+              <button
+                className="rounded-lg border border-line bg-white px-4 py-2.5 text-sm font-semibold text-ink transition hover:bg-cream"
+                onClick={() => void onRunPhaseTwoDemo()}
+              >
+                Run Phase 2
+              </button>
+              <button
+                className="rounded-lg bg-yc px-4 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:bg-ycDark"
+                onClick={() => void onRunFullDemo()}
+              >
+                Run Full Demo
+              </button>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-3">
+          <div className="mt-4 flex flex-wrap items-center gap-2.5">
             <button
-              className="rounded-2xl border border-glow/40 bg-glow/10 px-5 py-3 text-sm font-semibold text-glow transition hover:bg-glow/20"
-              onClick={() => void onRunDemo()}
+              className={`rounded-full px-3.5 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] transition ${
+                pitchMode ? 'bg-yc text-white' : 'border border-line bg-cream text-steel hover:text-ink'
+              }`}
+              onClick={onTogglePitchMode}
             >
-              Run Task 1 Demo
+              Pitch Mode {pitchMode ? 'On' : 'Off'}
             </button>
-            <button
-              className="rounded-2xl bg-coral px-5 py-3 text-sm font-semibold text-slate-950 transition hover:brightness-110"
-              onClick={() => void onRunPhaseTwoDemo()}
-            >
-              Run Phase 2 Demo
-            </button>
+            {stat('Pending approvals', `${summary.pendingApprovals}`)}
+            {stat('Active agents', `${summary.activeAgents}`)}
+            {stat('Sponsors connected', `${summary.connectedSponsors}/${sponsors.length}`)}
           </div>
         </div>
 
         <StatsCards company={company} agents={agents} approvals={approvals} budgetLedger={budgetLedger} evaluations={evaluations} />
 
         <section className="grid gap-4 xl:grid-cols-[1.35fr_0.85fr]">
-          <div className="rounded-[28px] border border-white/10 bg-white/5 p-4 backdrop-blur-xl">
+          <div className="glass rounded-2xl p-4">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-xs uppercase tracking-[0.35em] text-glow">Control Surface</p>
-                <p className="mt-1 text-xl font-semibold">Autonomous company view</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-yc">Control Surface</p>
+                <p className="mt-1 text-lg font-semibold text-ink">Live company operating view</p>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 {tabs.map((tab) => (
                   <button
                     key={tab}
-                    className={`rounded-full px-4 py-2 text-xs uppercase tracking-[0.22em] transition ${
-                      activeTab === tab ? 'bg-glow text-slate-950' : 'border border-white/10 bg-white/5 text-steel'
+                    className={`rounded-lg px-3.5 py-2 text-xs font-semibold capitalize transition ${
+                      activeTab === tab ? 'bg-yc text-white' : 'border border-line bg-white text-steel hover:bg-cream'
                     }`}
                     onClick={() => setActiveTab(tab)}
                   >
@@ -116,47 +170,35 @@ export function Dashboard({
               </div>
             </div>
 
-            {activeTab === 'org chart' ? <OrgChart agents={agents} onSelectAgent={onSelectAgent} /> : null}
-            {activeTab === 'timeline' ? <Timeline events={events} /> : null}
+            {activeTab === 'evolution' ? <EvolutionPanel company={company} events={events} agents={agents} pitchMode={pitchMode} /> : null}
+            {activeTab === 'hud' ? <HudPanel evaluations={evaluations} agents={agents} /> : null}
+            {activeTab === 'agents' ? <AgentGraph agents={agents} onSelectAgent={onSelectAgent} /> : null}
             {activeTab === 'approvals' ? (
               <ApprovalsPanel approvals={approvals} agents={agents} hiringCandidates={hiringCandidates} onApprove={onApproveRequest} onReject={onRejectRequest} />
             ) : null}
             {activeTab === 'sandbox' ? <SandboxPanel sandboxRuns={sandboxRuns} agents={agents} /> : null}
+            {activeTab === 'genome' ? <GenomePanel genome={genome} /> : null}
             {activeTab === 'memory' ? <MemoryPanel memory={memory} /> : null}
+            {activeTab === 'sponsors' ? <SponsorsPanel sponsors={sponsors} onOpenPage={onOpenSponsors} /> : null}
           </div>
 
           <div className="grid gap-4">
+            <Timeline events={events} />
             <HudEvaluations evaluations={evaluations} agents={agents} />
-            <div className="rounded-[28px] border border-white/10 bg-white/5 p-5 backdrop-blur-xl">
-              <p className="text-xs uppercase tracking-[0.35em] text-glow">Parallel Run</p>
-              <div className="mt-3 flex items-center gap-2">
-                <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] uppercase tracking-[0.25em] text-steel">
-                  Modal
-                </span>
-                <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] uppercase tracking-[0.25em] text-steel">
-                  Fireworks
-                </span>
-              </div>
-              <div className="mt-4 space-y-3 text-sm text-steel">
-                <p>Pending approvals: {sideSummary.activeApprovals}</p>
-                <p>Active sandbox runs: {sideSummary.sandboxActive}</p>
-                <p>Live events: {events.length}</p>
-              </div>
-            </div>
           </div>
         </section>
 
         <section className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
           <AgentDetailPanel agent={selectedAgent} task={tasks.find((item) => item.agentId === selectedAgent?.id) ?? null} />
-          <div className="rounded-[28px] border border-white/10 bg-white/5 p-5 backdrop-blur-xl">
-            <p className="text-xs uppercase tracking-[0.35em] text-glow">Narrative</p>
-            <p className="mt-3 text-lg font-semibold">What the judges should see</p>
-            <div className="mt-4 space-y-3 text-sm leading-7 text-steel">
-              <p>1. CEO births specialist agents under one mission.</p>
-              <p>2. Research Agent works, gets a strong HUD score, then dies after preserving knowledge.</p>
-              <p>3. Marketing Agent fails HUD review and is replaced by sharper specialists.</p>
-              <p>4. Profit and growth metrics improve live as the org chart evolves.</p>
-            </div>
+          <div className="glass rounded-2xl p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-yc">Judge Narrative</p>
+            <p className="mt-1.5 text-lg font-semibold text-ink">What the room should see</p>
+            <ol className="mt-4 space-y-3 text-sm leading-7 text-steel">
+              <li>1. CEO, Finance, and Memory Agents anchor the company as core operators.</li>
+              <li>2. Research uses Exa, Product uses Daytona, Hiring uses SixtyFour, and reasoning flows through Fireworks-style summaries.</li>
+              <li>3. HUD evaluates every outcome, memory captures the result, weak agents die, and the genome mutates.</li>
+              <li>4. The company ends the demo visibly stronger than it started.</li>
+            </ol>
           </div>
         </section>
       </div>

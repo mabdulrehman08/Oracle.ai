@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Landing } from './components/Landing';
 import { Dashboard } from './components/Dashboard';
+import { Landing } from './components/Landing';
+import { SponsorsPage } from './components/SponsorsPage';
 import { api } from './lib/api';
 import { joinCompanyRoom, socket } from './lib/socket';
 import type {
@@ -8,6 +9,7 @@ import type {
   Approval,
   BudgetLedgerEntry,
   Company,
+  CompanyGenome,
   CompanyMemoryEntry,
   CompanyMode,
   CompanySnapshot,
@@ -15,6 +17,7 @@ import type {
   EventRecord,
   HiringCandidate,
   SandboxRun,
+  SponsorStatus,
   Task,
 } from './types';
 
@@ -38,9 +41,26 @@ const socketEvents = [
   'sandbox_completed',
   'parallel_run_started',
   'parallel_run_completed',
+  'genome_updated',
+  'company_evolved',
+  'pitch_signal',
 ];
 
+const emptyGenome: CompanyGenome = {
+  companyId: '',
+  successfulAgents: [],
+  failedAgents: [],
+  bestStrategy: 'No winning strategy recorded yet.',
+  worstStrategy: 'No failed strategy recorded yet.',
+  currentMutation: 'Baseline company blueprint.',
+  nextRecommendedMutation: 'Observe the first agent evaluation to mutate intelligently.',
+  updatedAt: new Date(0).toISOString(),
+};
+
+const getPath = () => window.location.pathname;
+
 export default function App() {
+  const [path, setPath] = useState(getPath());
   const [company, setCompany] = useState<Company | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -51,13 +71,25 @@ export default function App() {
   const [sandboxRuns, setSandboxRuns] = useState<SandboxRun[]>([]);
   const [hiringCandidates, setHiringCandidates] = useState<HiringCandidate[]>([]);
   const [memory, setMemory] = useState<CompanyMemoryEntry[]>([]);
+  const [genome, setGenome] = useState<CompanyGenome>(emptyGenome);
+  const [sponsors, setSponsors] = useState<SponsorStatus[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [pitchMode, setPitchMode] = useState(false);
 
   useEffect(() => {
+    const onPop = () => setPath(getPath());
+    window.addEventListener('popstate', onPop);
     return () => {
+      window.removeEventListener('popstate', onPop);
       socket.disconnect();
     };
+  }, []);
+
+  useEffect(() => {
+    api.getSponsors().then((response) => setSponsors(response.sponsors)).catch((error) => {
+      console.error('Failed to load sponsors, keeping empty state.', error);
+    });
   }, []);
 
   useEffect(() => {
@@ -77,6 +109,8 @@ export default function App() {
       setSandboxRuns(snapshot.sandboxRuns);
       setHiringCandidates(snapshot.hiringCandidates);
       setMemory(snapshot.memory);
+      setGenome(snapshot.genome);
+      setSponsors(snapshot.sponsors);
       setSelectedAgentId((current) => current ?? snapshot.agents[0]?.id ?? null);
     };
 
@@ -86,50 +120,65 @@ export default function App() {
     };
   }, [company?.id]);
 
+  const navigate = (nextPath: '/' | '/sponsors') => {
+    if (window.location.pathname !== nextPath) {
+      window.history.pushState({}, '', nextPath);
+      setPath(nextPath);
+    }
+  };
+
+  const resetCompanyState = () => {
+    setTasks([]);
+    setEvaluations([]);
+    setEvents([]);
+    setApprovals([]);
+    setBudgetLedger([]);
+    setSandboxRuns([]);
+    setHiringCandidates([]);
+    setMemory([]);
+    setGenome(emptyGenome);
+  };
+
   const startCompany = async (idea: string, budget: number, mode: CompanyMode) => {
     setLoading(true);
     try {
       const response = await api.startCompany(idea, budget, mode);
       setCompany(response.company);
       setAgents(response.agents);
-      setTasks([]);
-      setEvaluations([]);
+      resetCompanyState();
       setEvents(response.events);
-      setApprovals([]);
-      setBudgetLedger([]);
-      setSandboxRuns([]);
-      setHiringCandidates([]);
-      setMemory([]);
       setSelectedAgentId(response.agents[0]?.id ?? null);
+      navigate('/');
     } finally {
       setLoading(false);
     }
   };
 
-  const runDemo = async () => {
-    if (!company) {
-      const response = await api.startCompany('Build a profitable AI Translator startup', 5000, 'profit');
-      setCompany(response.company);
-      setAgents(response.agents);
-      setEvents(response.events);
-      setTasks([]);
-      setEvaluations([]);
-      setApprovals([]);
-      setBudgetLedger([]);
-      setSandboxRuns([]);
-      setHiringCandidates([]);
-      setMemory([]);
-      setSelectedAgentId(response.agents[0]?.id ?? null);
-      await api.runDemo(response.company.id);
-      return;
-    }
+  const ensureDemoCompany = async () => {
+    if (company) return company;
+    const response = await api.startCompany('Build a profitable AI Translator startup', 5000, 'profit');
+    setCompany(response.company);
+    setAgents(response.agents);
+    resetCompanyState();
+    setEvents(response.events);
+    setSelectedAgentId(response.agents[0]?.id ?? null);
+    navigate('/');
+    return response.company;
+  };
 
-    await api.runDemo(company.id);
+  const runDemo = async () => {
+    const currentCompany = await ensureDemoCompany();
+    await api.runDemo(currentCompany.id);
   };
 
   const runPhaseTwoDemo = async () => {
-    if (!company) return;
-    await api.runPhaseTwoDemo(company.id);
+    const currentCompany = await ensureDemoCompany();
+    await api.runPhaseTwoDemo(currentCompany.id);
+  };
+
+  const runFullDemo = async () => {
+    const currentCompany = await ensureDemoCompany();
+    await api.runFullDemo(currentCompany.id);
   };
 
   const approveRequest = async (approvalId: string) => {
@@ -140,8 +189,12 @@ export default function App() {
     await api.rejectRequest(approvalId);
   };
 
+  if (path === '/sponsors') {
+    return <SponsorsPage sponsors={sponsors} onBack={() => navigate('/')} />;
+  }
+
   if (!company) {
-    return <Landing loading={loading} onStart={startCompany} onDemo={runDemo} />;
+    return <Landing loading={loading} onStart={startCompany} onDemo={runFullDemo} />;
   }
 
   const selectedAgent = agents.find((agent) => agent.id === selectedAgentId) ?? agents[0] ?? null;
@@ -158,12 +211,18 @@ export default function App() {
       sandboxRuns={sandboxRuns}
       hiringCandidates={hiringCandidates}
       memory={memory}
+      genome={genome}
+      sponsors={sponsors}
+      pitchMode={pitchMode}
       selectedAgent={selectedAgent}
       onSelectAgent={setSelectedAgentId}
       onRunDemo={runDemo}
       onRunPhaseTwoDemo={runPhaseTwoDemo}
+      onRunFullDemo={runFullDemo}
       onApproveRequest={approveRequest}
       onRejectRequest={rejectRequest}
+      onTogglePitchMode={() => setPitchMode((current) => !current)}
+      onOpenSponsors={() => navigate('/sponsors')}
     />
   );
 }

@@ -19,21 +19,21 @@ export function ApprovalsPanel({
   });
 
   return (
-    <section className="rounded-[28px] border border-white/10 bg-white/5 p-5 backdrop-blur-xl">
+    <section className="rounded-xl border border-line bg-white p-5">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs uppercase tracking-[0.35em] text-glow">Approvals</p>
-          <p className="mt-2 text-xl font-semibold">Human-in-the-loop decisions</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-yc">Approvals</p>
+          <p className="mt-1 text-lg font-semibold text-ink">Human-in-the-loop decisions</p>
         </div>
-        <div className="rounded-full border border-white/10 px-3 py-1 text-xs text-steel">
+        <div className="rounded-full border border-line bg-cream px-3 py-1 text-xs font-medium text-steel">
           {approvals.filter((approval) => approval.status === 'pending').length} pending
         </div>
       </div>
 
       <div className="mt-4 space-y-4">
         {approvals.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-white/10 px-4 py-8 text-sm text-steel">
-            No approvals yet. Run Phase 2 to watch agents request budget and contractor help.
+          <div className="rounded-xl border border-dashed border-line bg-cream px-4 py-8 text-sm text-muted">
+            No approvals yet. Run Phase 2 or the full demo to watch agents request budget and contractor help.
           </div>
         ) : (
           approvals
@@ -42,72 +42,83 @@ export function ApprovalsPanel({
             .map((approval) => {
               const agent = agents.find((item) => item.id === approval.agentId);
               const candidates = candidatesByAgent.get(approval.agentId) ?? [];
+              const pending = approval.status === 'pending';
               return (
-                <div key={approval.id} className="rounded-3xl border border-white/10 bg-[#0b1220] p-4">
+                <div key={approval.id} className="rounded-xl border border-line bg-cream p-4">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-base font-semibold text-white">{approval.title}</p>
-                        <span className="rounded-full border border-coral/30 bg-coral/10 px-2 py-1 text-[10px] uppercase tracking-[0.25em] text-coral">
+                        <p className="text-base font-semibold text-ink">{approval.title}</p>
+                        <span className="rounded-full border border-yc/25 bg-ycSoft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-yc">
                           {approval.type.replace('_', ' ')}
                         </span>
                       </div>
                       <p className="mt-2 text-sm text-steel">
                         {agent?.name ?? 'Unknown Agent'} wants ${approval.amount.toLocaleString()}.
                       </p>
-                      <p className="mt-2 text-sm leading-6 text-steel/90">{approval.reason}</p>
+                      <p className="mt-2 text-sm leading-6 text-steel">{approval.reason}</p>
                     </div>
-                    <div className="flex flex-col gap-2">
-                      <div className="rounded-full border border-white/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-steel">
+                    <div className="flex flex-col items-start gap-2 lg:items-end">
+                      <span
+                        className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${
+                          approval.status === 'approved'
+                            ? 'bg-lime/10 text-lime'
+                            : approval.status === 'rejected'
+                              ? 'bg-coral/10 text-coral'
+                              : 'bg-cream text-steel'
+                        }`}
+                      >
                         {approval.status}
-                      </div>
-                      {approval.status === 'pending' ? (
-                        <>
+                      </span>
+                      {pending ? (
+                        <div className="flex gap-2">
                           <button
-                            className="rounded-2xl bg-glow px-4 py-2 text-sm font-semibold text-slate-950"
+                            className="rounded-lg bg-yc px-4 py-2 text-sm font-semibold text-white transition hover:bg-ycDark"
                             onClick={() => void onApprove(approval.id)}
                           >
                             Approve
                           </button>
                           <button
-                            className="rounded-2xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white"
+                            className="rounded-lg border border-line bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:bg-cream"
                             onClick={() => void onReject(approval.id)}
                           >
                             Reject
                           </button>
-                        </>
+                        </div>
                       ) : null}
                     </div>
                   </div>
 
                   {approval.financeRecommendation ? (
-                    <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3">
+                    <div className="mt-4 rounded-lg border border-line bg-white p-3">
                       <div className="flex items-center gap-2">
-                        <span className="rounded-full border border-lime/25 bg-lime/10 px-2 py-1 text-[10px] uppercase tracking-[0.25em] text-lime">
+                        <span className="rounded-full border border-lime/25 bg-lime/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-lime">
                           Finance
                         </span>
-                        <span className="text-xs uppercase tracking-[0.2em] text-steel">{approval.financeRecommendation}</span>
+                        <span className="text-xs font-semibold uppercase tracking-[0.1em] text-steel">{approval.financeRecommendation}</span>
                       </div>
                       <p className="mt-2 text-sm text-steel">{approval.financeReasoning}</p>
                     </div>
                   ) : null}
 
                   {candidates.length > 0 ? (
-                    <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3">
+                    <div className="mt-4 rounded-lg border border-line bg-white p-3">
                       <div className="flex items-center gap-2">
-                        <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] uppercase tracking-[0.25em] text-steel">
+                        <span className="rounded-full border border-line bg-cream px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-steel">
                           SixtyFour
                         </span>
-                        <span className="text-sm font-medium text-white">Hiring candidates</span>
+                        <span className="text-sm font-medium text-ink">Hiring candidates</span>
                       </div>
                       <div className="mt-3 grid gap-3 lg:grid-cols-3">
                         {candidates.map((candidate) => (
-                          <div key={candidate.id} className="rounded-2xl border border-white/10 bg-[#101828] p-3">
-                            <p className="text-sm font-semibold text-white">{candidate.name}</p>
-                            <p className="mt-1 text-xs uppercase tracking-[0.2em] text-glow">{candidate.role}</p>
-                            <p className="mt-2 text-sm text-steel">{candidate.company} · {candidate.location}</p>
-                            <p className="mt-2 text-sm text-steel">${candidate.costEstimate.toLocaleString()}</p>
-                            <p className="mt-2 text-xs leading-5 text-steel/90">{candidate.reason}</p>
+                          <div key={candidate.id} className="rounded-lg border border-line bg-cream p-3">
+                            <p className="text-sm font-semibold text-ink">{candidate.name}</p>
+                            <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-yc">{candidate.role}</p>
+                            <p className="mt-2 text-sm text-steel">
+                              {candidate.company} · {candidate.location}
+                            </p>
+                            <p className="mt-1 font-mono text-sm text-ink">${candidate.costEstimate.toLocaleString()}</p>
+                            <p className="mt-2 text-xs leading-5 text-steel">{candidate.reason}</p>
                           </div>
                         ))}
                       </div>

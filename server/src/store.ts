@@ -6,6 +6,7 @@ import type {
   ApprovalType,
   BudgetLedgerEntry,
   Company,
+  CompanyGenome,
   CompanyMemoryEntry,
   CompanyMode,
   CompanySnapshot,
@@ -15,6 +16,7 @@ import type {
   HiringCandidate,
   SandboxRun,
   SandboxStatus,
+  SponsorStatus,
   Task,
   Verdict,
 } from './types.js';
@@ -29,13 +31,26 @@ const budgetLedger = new Map<string, BudgetLedgerEntry>();
 const sandboxRuns = new Map<string, SandboxRun>();
 const hiringCandidates = new Map<string, HiringCandidate>();
 const memoryEntries = new Map<string, CompanyMemoryEntry>();
+const genomes = new Map<string, CompanyGenome>();
+let sponsorStatuses: SponsorStatus[] = [];
 
 const now = () => new Date().toISOString();
+
+const createDefaultGenome = (companyId: string): CompanyGenome => ({
+  companyId,
+  successfulAgents: [],
+  failedAgents: [],
+  bestStrategy: 'No winning strategy recorded yet.',
+  worstStrategy: 'No failed strategy recorded yet.',
+  currentMutation: 'Baseline company blueprint.',
+  nextRecommendedMutation: 'Observe the first agent evaluation to mutate intelligently.',
+  updatedAt: now(),
+});
 
 export const createCompany = (idea: string, budget: number, mode: CompanyMode): Company => {
   const company: Company = {
     id: uuid(),
-    name: 'Oracle Evolution Co.',
+    name: 'evoler.ai',
     idea,
     mode,
     budget,
@@ -45,6 +60,7 @@ export const createCompany = (idea: string, budget: number, mode: CompanyMode): 
     createdAt: now(),
   };
   companies.set(company.id, company);
+  genomes.set(company.id, createDefaultGenome(company.id));
   return company;
 };
 
@@ -84,13 +100,12 @@ export const updateTask = (id: string, patch: Partial<Task>) => {
   return next;
 };
 
-export const createEvaluation = (agentId: string, score: number, verdict: Verdict, reasoning: string): Evaluation => {
+export const createEvaluation = (
+  input: Omit<Evaluation, 'id' | 'createdAt'>,
+): Evaluation => {
   const evaluation: Evaluation = {
     id: uuid(),
-    agentId,
-    score,
-    verdict,
-    reasoning,
+    ...input,
     createdAt: now(),
   };
   evaluations.set(evaluation.id, evaluation);
@@ -175,6 +190,21 @@ export const createMemoryEntry = (input: Omit<CompanyMemoryEntry, 'id' | 'create
   return entry;
 };
 
+export const updateGenome = (companyId: string, patch: Partial<CompanyGenome>) => {
+  const genome = genomes.get(companyId) ?? createDefaultGenome(companyId);
+  const next = { ...genome, ...patch, updatedAt: now() };
+  genomes.set(companyId, next);
+  return next;
+};
+
+export const getGenome = (companyId: string) => genomes.get(companyId) ?? createDefaultGenome(companyId);
+
+export const setSponsorStatuses = (statuses: SponsorStatus[]) => {
+  sponsorStatuses = statuses;
+};
+
+export const getSponsorStatuses = () => sponsorStatuses;
+
 export const getCompanySnapshot = (companyId: string): CompanySnapshot | undefined => {
   const company = companies.get(companyId);
   if (!company) return undefined;
@@ -208,6 +238,8 @@ export const getCompanySnapshot = (companyId: string): CompanySnapshot | undefin
     memory: [...memoryEntries.values()]
       .filter((entry) => entry.companyId === companyId)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    genome: getGenome(companyId),
+    sponsors: sponsorStatuses,
   };
 };
 
@@ -222,3 +254,10 @@ export const getSandboxRunsByCompany = (companyId: string) =>
   [...sandboxRuns.values()].filter((run) => run.companyId === companyId);
 export const getHiringCandidatesByCompany = (companyId: string) =>
   [...hiringCandidates.values()].filter((candidate) => candidate.companyId === companyId);
+export const getMemoryByCompany = (companyId: string) =>
+  [...memoryEntries.values()].filter((entry) => entry.companyId === companyId);
+export const getEvaluationsByCompany = (companyId: string) =>
+  [...evaluations.values()].filter((entry) => {
+    const agent = agents.get(entry.agentId);
+    return agent?.companyId === companyId;
+  });

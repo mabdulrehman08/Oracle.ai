@@ -1,5 +1,5 @@
 {
-  "name": "oracle-evolution-task-1",
+  "name": "evoler-ai",
   "private": true,
   "version": "0.1.0",
   "scripts": {
@@ -9,5 +9,8 @@
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
+  },
+  "dependencies": {
+    "openai": "^6.44.0"
   }
 }

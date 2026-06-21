@@ -1,27 +1,41 @@
-import type { Verdict } from './types.js';
+import { evaluateAgentTask } from './services/sponsors/hudClient.js';
+import type { Agent, Company, CompanyMemoryEntry, Evaluation } from './types.js';
 
-export const evaluateTaskOutput = (taskOutput: string): { score: number; verdict: Verdict; reasoning: string } => {
-  const normalized = taskOutput.toLowerCase();
-
-  if (normalized.includes('generic channel strategy') || normalized.includes('specialized growth agents')) {
-    return {
-      score: 34,
-      verdict: 'fail',
-      reasoning: 'Generic channel strategy. Needs specialized growth agents.',
-    };
-  }
-
-  if (normalized.includes('deepl') || normalized.includes('competitor') || normalized.includes('market gap')) {
-    return {
-      score: 88,
-      verdict: 'pass',
-      reasoning: 'Strong competitor analysis with clear market gap.',
-    };
-  }
+export async function evaluateTaskOutput(input: {
+  company: Company;
+  agent: Agent;
+  taskTitle: string;
+  taskOutput: string;
+  memory: CompanyMemoryEntry[];
+}): Promise<Omit<Evaluation, 'id' | 'createdAt'>> {
+  const result = await evaluateAgentTask({
+    company: input.company,
+    agent: input.agent,
+    task: {
+      title: input.taskTitle,
+      role: input.agent.role,
+      goal: input.agent.kpi,
+    },
+    output: input.taskOutput,
+    memory: input.memory,
+  });
 
   return {
-    score: 62,
-    verdict: 'pass',
-    reasoning: 'Solid execution with room for sharper specialization.',
+    companyId: input.company.id,
+    agentId: input.agent.id,
+    agentName: input.agent.name,
+    taskTitle: input.taskTitle,
+    score: result.score,
+    decision: result.decision,
+    confidence: result.confidence,
+    reasoning: result.reasoning,
+    strengths: result.strengths,
+    weaknesses: result.weaknesses,
+    suggestedAgents: result.suggestedAgents,
+    pass: result.pass,
+    verdict: result.verdict,
+    provider: result.provider,
+    simulated: result.simulated,
+    trace: result.trace,
   };
-};
+}

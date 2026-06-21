@@ -52,20 +52,26 @@ export function OrgChart({ agents, onSelectAgent }: { agents: Agent[]; onSelectA
 
     const flowEdges: Edge[] = agents
       .filter((agent) => agent.parentAgentId)
-      .map((agent) => ({
-        id: `${agent.parentAgentId}-${agent.id}`,
-        source: agent.parentAgentId!,
-        target: agent.id,
-        animated: agent.status === 'working' || agent.status === 'spawned',
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color: '#6ee7f9',
-        },
-        style: {
-          stroke: '#6ee7f9',
-          opacity: agent.status === 'terminated' ? 0.25 : 0.8,
-        },
-      }));
+      .map((agent) => {
+        const dead = agent.status === 'terminated';
+        const color = dead ? '#c9c3b8' : '#ff6600';
+        return {
+          id: `${agent.parentAgentId}-${agent.id}`,
+          source: agent.parentAgentId!,
+          target: agent.id,
+          type: 'smoothstep',
+          animated: agent.status === 'working' || agent.status === 'spawned' || agent.status === 'executing',
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            color,
+          },
+          style: {
+            stroke: color,
+            strokeWidth: 1.5,
+            opacity: dead ? 0.2 : 0.7,
+          },
+        };
+      });
 
     return {
       nodes: flowNodes,
@@ -74,10 +80,16 @@ export function OrgChart({ agents, onSelectAgent }: { agents: Agent[]; onSelectA
   }, [agents, onSelectAgent]);
 
   return (
-    <div className="h-[520px] rounded-[24px] bg-[#050814]">
-      <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView minZoom={0.35} maxZoom={1.4}>
-        <Background color="#243248" gap={24} />
-        <MiniMap pannable zoomable style={{ background: '#0f1726' }} nodeColor="#6ee7f9" />
+    <div className="relative h-[520px] overflow-hidden rounded-2xl border border-line bg-[radial-gradient(circle_at_50%_0%,rgba(255,102,0,0.05),transparent_55%),#ffffff]">
+      <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView minZoom={0.35} maxZoom={1.4} proOptions={{ hideAttribution: true }}>
+        <Background color="#e7e2d8" gap={26} size={1.4} />
+        <MiniMap
+          pannable
+          zoomable
+          maskColor="rgba(250,248,244,0.7)"
+          style={{ background: '#ffffff', borderRadius: 12, border: '1px solid #eae6df' }}
+          nodeColor={(node) => (node.data?.agent?.status === 'terminated' ? '#c9c3b8' : '#ff6600')}
+        />
         <Controls />
       </ReactFlow>
     </div>

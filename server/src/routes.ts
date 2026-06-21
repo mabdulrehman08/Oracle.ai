@@ -1,21 +1,23 @@
 import { Router } from 'express';
 import type { Server as SocketServer } from 'socket.io';
+import { evaluateTaskOutput } from './evaluator.js';
 import {
+  approveRequest,
+  completePhaseTwoRun,
   continuePhaseTwoAfterApproval,
   createApprovalRequest,
   createHiringCandidates,
+  finalizeFullEvolution,
   rejectRequest,
   runAgentTask,
   runDemoSequence,
+  runFullEvolutionDemo,
   runPhaseTwoDemo,
   runSandboxTask,
   startCompanyFlow,
   terminateAgent,
-  approveRequest,
-  completePhaseTwoRun,
 } from './demoEngine.js';
-import { createAgent, createCompany, createEvaluation, getAgent, getApprovalsByCompany, getCompanySnapshot } from './store.js';
-import { evaluateTaskOutput } from './evaluator.js';
+import { createAgent, createCompany, createEvaluation, getAgent, getApprovalsByCompany, getCompany, getCompanySnapshot, getMemoryByCompany, getSponsorStatuses } from './store.js';
 
 export const createRoutes = (io: SocketServer) => {
   const router = Router();
@@ -38,6 +40,7 @@ export const createRoutes = (io: SocketServer) => {
       role: 'Chief Evolution Officer',
       status: 'spawned',
       kpi: 'Build and evolve the org chart',
+      isCore: true,
     });
 
     startCompanyFlow(io, idea, budget, mode, company);
@@ -58,6 +61,10 @@ export const createRoutes = (io: SocketServer) => {
     return res.json(snapshot);
   });
 
+  router.get('/sponsors', (_req, res) => {
+    return res.json({ sponsors: getSponsorStatuses() });
+  });
+
   router.post('/demo/run', (req, res) => {
     const { companyId } = req.body as { companyId?: string };
     if (!companyId) {
@@ -65,7 +72,7 @@ export const createRoutes = (io: SocketServer) => {
     }
 
     runDemoSequence(io, companyId).catch((error: unknown) => {
-      console.error('Demo failed', error);
+      console.error('Task 1 demo failed', error);
     });
 
     return res.json({ ok: true, companyId });
@@ -85,6 +92,20 @@ export const createRoutes = (io: SocketServer) => {
     }
   });
 
+  router.post('/demo/full', async (req, res) => {
+    const { companyId } = req.body as { companyId?: string };
+    if (!companyId) {
+      return res.status(400).json({ error: 'companyId is required' });
+    }
+
+    try {
+      const run = await runFullEvolutionDemo(io, companyId);
+      return res.json({ ok: true, companyId, pendingApprovalId: run.approvalId });
+    } catch (error) {
+      return res.status(404).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
   router.post('/agents/:id/run', (req, res) => {
     try {
       const agent = runAgentTask(io, req.params.id);
@@ -94,8 +115,8 @@ export const createRoutes = (io: SocketServer) => {
     }
   });
 
-  router.post('/evaluate', (req, res) => {
-    const { agentId, taskOutput } = req.body as { agentId?: string; taskOutput?: string };
+  router.post('/evaluate', async (req, res) => {
+    const { agentId, taskOutput, taskTitle } = req.body as { agentId?: string; taskOutput?: string; taskTitle?: string };
     if (!agentId || !taskOutput) {
       return res.status(400).json({ error: 'agentId and taskOutput are required' });
     }
@@ -104,9 +125,19 @@ export const createRoutes = (io: SocketServer) => {
     if (!agent) {
       return res.status(404).json({ error: 'Agent not found' });
     }
+    const company = getCompany(agent.companyId);
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
 
-    const result = evaluateTaskOutput(taskOutput);
-    createEvaluation(agentId, result.score, result.verdict, result.reasoning);
+    const result = await evaluateTaskOutput({
+      company,
+      agent,
+      taskTitle: taskTitle ?? 'Manual evaluation',
+      taskOutput,
+      memory: getMemoryByCompany(agent.companyId),
+    });
+    createEvaluation(result);
     return res.json(result);
   });
 
@@ -144,7 +175,7 @@ export const createRoutes = (io: SocketServer) => {
     return res.json({ agents: created });
   });
 
-  router.post('/approvals/request', (req, res) => {
+  router.post('/approvals/request', async (req, res) => {
     const { companyId, agentId, type, title, amount, reason } = req.body as {
       companyId?: string;
       agentId?: string;
@@ -158,7 +189,7 @@ export const createRoutes = (io: SocketServer) => {
       return res.status(400).json({ error: 'companyId, agentId, type, title, amount, and reason are required' });
     }
 
-    const approval = createApprovalRequest(io, companyId, agentId, type, title, amount, reason);
+    const approval = await createApprovalRequest(io, companyId, agentId, type, title, amount, reason);
     return res.json({ approval });
   });
 
@@ -175,6 +206,7 @@ export const createRoutes = (io: SocketServer) => {
         const ceo = snapshot?.agents.find((agent) => agent.name === 'CEO Agent');
         if (ceo) {
           await completePhaseTwoRun(io, approval.companyId, ceo.id);
+          await finalizeFullEvolution(io, approval.companyId);
         }
       }
       return res.json({ approval });
@@ -192,13 +224,13 @@ export const createRoutes = (io: SocketServer) => {
     }
   });
 
-  router.post('/hiring/search', (req, res) => {
+  router.post('/hiring/search', async (req, res) => {
     const { companyId, agentId } = req.body as { companyId?: string; agentId?: string };
     if (!companyId || !agentId) {
       return res.status(400).json({ error: 'companyId and agentId are required' });
     }
 
-    const candidates = createHiringCandidates(io, companyId, agentId);
+    const candidates = await createHiringCandidates(io, companyId, agentId);
     return res.json({ candidates });
   });
 

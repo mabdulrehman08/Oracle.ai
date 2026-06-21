@@ -1,4 +1,4 @@
-import type { Agent, Approval, Company, CompanyMode, CompanySnapshot, EventRecord } from '../types';
+import type { Agent, Approval, Company, CompanyMode, CompanySnapshot, EventRecord, SponsorStatus } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000';
 
@@ -34,6 +34,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ companyId }),
     }),
+  runFullDemo: (companyId: string) =>
+    request<{ ok: boolean; companyId: string; pendingApprovalId: string }>('/demo/full', {
+      method: 'POST',
+      body: JSON.stringify({ companyId }),
+    }),
   approveRequest: (approvalId: string) =>
     request<{ approval: Approval }>(`/approvals/${approvalId}/approve`, {
       method: 'POST',
@@ -44,4 +49,5 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({}),
     }),
+  getSponsors: () => request<{ sponsors: SponsorStatus[] }>('/sponsors'),
 };
